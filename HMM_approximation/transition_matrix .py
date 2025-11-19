@@ -32,8 +32,11 @@ def generate_delivery(n_rows, n_cols, color_probs, rng=None):
     return layout_enum
 
 
-def create_p_look_matrix(P_look, delivery, start_pos=(0, 0)):
+def get_transition_matrix(rel_matrix, p_look, delivery, p_break = 0.15):
     """
+    rel_matrix: np.ndarray shape (n_rels, 2)
+        rel_matrix — P(релевантности) для ячеек
+    
     P_look: np.ndarray shape (n_colors, n_colors)
         P_look[c_from, c_to] — P(цвет_to | цвет_from)
 
@@ -41,65 +44,18 @@ def create_p_look_matrix(P_look, delivery, start_pos=(0, 0)):
         коды цветов ячеек выдачи:
         - либо np.ndarray из IntEnum (Color),
         - либо np.ndarray из int (0..n_colors-1)
-
-    start_pos: (r, c)
-        координаты стартовой ячейки, для которой нет "предыдущей".
-        Для неё можно считать P=1 (старт) или 0 — тут я ставлю 1.0.
-
-    Возвращает:
-        probs: 2D-массив той же формы, что delivery,
-        где probs[r, c] = P(color(r,c) | color(parent(r,c)))
-        по заданной матрице P_look.
     """
     delivery = np.asarray(delivery)
-    n_rows, n_cols = delivery.shape
 
     # приведение Enum -> int (если delivery из Enum), либо int -> int
     colors = np.vectorize(int)(delivery)
-
-    # задаём топологию — кто с кем сосед
-    def neighbors(r, c):
-        # крест: вверх, вниз, влево, вправо
-        for dr, dc in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
-            nr, nc = r + dr, c + dc
-            if 0 <= nr < n_rows and 0 <= nc < n_cols:
-                yield nr, nc
-
-    # 1. Строим "родителя" для каждой ячейки BFS-ом от start_pos
-    parents = {start_pos: None}
-    q = deque([start_pos])
-
-    while q:
-        r, c = q.popleft()
-        for nr, nc in neighbors(r, c):
-            if (nr, nc) not in parents:
-                parents[(nr, nc)] = (r, c)
-                q.append((nr, nc))
-
-    # 2. Считаем P(ячейка | родитель) по цветам
-    probs = np.zeros_like(colors, dtype=float)
-
-    for (r, c), parent in parents.items():
-        if parent is None:
-            # стартовая ячейка — как хочешь, я ставлю 1.0
-            probs[r, c] = 1.0
-        else:
-            pr, pc = parent
-            c_from = colors[pr, pc]   # цвет родителя
-            c_to   = colors[r, c]     # цвет текущей ячейки
-            probs[r, c] = P_look[c_from, c_to]
-
-    return probs
-
-
-def get_transition_matrix(rel_matrix, p_look_matrix, p_break = 0.15):
     # 0_0 0_1
     # 1_0 1_1
     #"S0", "S1", "S2", "S3", "S0B", "S1B", "S2B", "S3B", "S0D", "S1D", "S2D", "S3D",  "None"
     transition_matrix = np.zeros((13, 13))
     #first row
-    p_move_right = p_look_matrix[0, 1] / (p_look_matrix[1, 0] + p_look_matrix[0, 1])
-    p_move_left_down = p_look_matrix[1, 0] / (p_look_matrix[1, 0] + p_look_matrix[0, 1])
+    p_move_right = p_look[colors[0, 0]][colors[0, 1]] / (p_look[colors[0, 0]][colors[0, 1]] + p_look[colors[0, 0]][colors[1, 0]])
+    p_move_left_down = p_look[colors[0, 0]][colors[1, 0]] / (p_look[colors[0, 0]][colors[0, 1]] + p_look[colors[0, 0]][colors[1, 0]])
     transition_matrix[0, 0] = (1 - rel_matrix[0, 0]) * (1 - p_break) * p_move_left_down # P(s0|s0)
     transition_matrix[0, 3] = (1 - rel_matrix[0, 0]) * (1 - p_break) * p_move_right * (1 - rel_matrix[0, 1]) * (1 - p_break) # P(s3|s0)
     transition_matrix[0, 4] = rel_matrix[0, 0] # P(s0b|s0)
@@ -116,8 +72,8 @@ def get_transition_matrix(rel_matrix, p_look_matrix, p_break = 0.15):
     transition_matrix[1, 11] = (1 - rel_matrix[0, 0]) * (1 - p_break) * p_move_right * (1 - rel_matrix[0, 1]) * p_break # P(s3d|s1)
 
     #third row
-    p_move_left = p_look_matrix[0, 0] / (p_look_matrix[0, 0] + p_look_matrix[1, 1])
-    p_move_right_down = p_look_matrix[1, 1] / (p_look_matrix[0, 0] + p_look_matrix[1, 1])
+    p_move_left = p_look[colors[0, 1]][colors[0, 0]] / (p_look[colors[0, 1]][colors[0, 0]] + p_look[colors[0, 1]][colors[1, 1]])
+    p_move_right_down = p_look[colors[0, 1]][colors[1, 1]] / (p_look[colors[0, 1]][colors[0, 0]] + p_look[colors[0, 1]][colors[1, 1]])
     transition_matrix[2, 1] = (1 - rel_matrix[0, 1]) * (1 - p_break) * p_move_left * (1 - rel_matrix[0, 0]) * (1 - p_break) #P(s1|s2)
     transition_matrix[2, 2] = (1 - rel_matrix[0, 1]) * (1 - p_break) * p_move_right_down # P(s2|s2)
     transition_matrix[2, 5] = (1 - rel_matrix[0, 1]) * (1 - p_break) * p_move_left * rel_matrix[0, 0] #P(s1b|s2)
@@ -137,7 +93,6 @@ def get_transition_matrix(rel_matrix, p_look_matrix, p_break = 0.15):
     transition_matrix[4:, 12] = 1.0  # P(None|sX) = 1.0 for all buying and break states
 
     return transition_matrix
-
 
 from enum import IntEnum
 
@@ -165,29 +120,26 @@ def demo():
         Color.YELLOW: 0.2,
     }
 
-    layout_enum = generate_delivery(
+    delivery = generate_delivery(
         n_rows=6,
         n_cols=2,
         color_probs=color_probs
     )
-    p_look_matrix = create_p_look_matrix(P_look, layout_enum)
-    T = get_transition_matrix(rel_matrix, p_look_matrix, p_break=0.15)
 
     np.set_printoptions(precision=3, suppress=True)
-    # print("\nМатрица переходов T (13x13) =\n", T)
-
-    row_sums = T.sum(axis=1)
-    print("\nСуммы по строкам:\n", row_sums)
 
     state = np.array([0.25, 0.25, 0.25, 0.25, 0, 0, 0, 0, 0, 0, 0, 0, 0])
-    state = state @ T
-    for i in range(1, rel_matrix.shape[0] - 1):
-        m = np.vstack((rel_matrix[i], rel_matrix[i+1]))
-        print(f"matrix {i}:\n{m}")
-        T = get_transition_matrix(m, p_look_matrix[i:i+2, :], p_break=0.05)
+    for i in range(rel_matrix.shape[0] - 1):
+        T = get_transition_matrix(rel_matrix[i: i + 2, :], P_look, delivery[i:i+2, :], p_break=0.05)
+        if i == 0:
+            # print("\nМатрица переходов T (13x13) =\n", T)
+            row_sums = T.sum(axis=1)
+            print("\nСуммы по строкам:\n", row_sums)
+        print(f"matrix {i}:\n{rel_matrix[i: i + 2, :]}")
         state = state @ T
         print(f"\nРаспределение после {i} шага:\n", state)
         print()
+    
 
 if __name__ == "__main__":
     demo()
