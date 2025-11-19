@@ -100,4 +100,4 @@ def get_emission_matrix(matrix_click, p_break = 0.15):
 matrix_click = np.array([0.2, 0.3])
 m = get_emission_matrix(matrix_click, p_break= 0.15)
 # [sum(x) for x in m]
-m # столбцы Sки, строки состояний вектор состояний для каждой Ски это просто m[i состояние, 0:8 иксов]
+m # строки Sки, строки состояний вектор состояний для каждой Ски это просто m[i] это наша эска
