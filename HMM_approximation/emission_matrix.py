@@ -38,11 +38,9 @@ matrix_click - семпл из нашей выдачи
 
 import numpy as np
 def get_emission_matrix(matrix_click, p_break = 0.15):
-    transition_matrix = np.zeros((13, 9))
-    pcL = matrix_click[0]
-    pcR = matrix_click[1]
-    pbcL = matrix_buy_click[0]
-    pbcR = matrix_buy_click[1]
+    transition_matrix = np.zeros((13, 8))
+    pcL = matrix_click[0, 0]
+    pcR = matrix_click[0, 1]
     #S0 row
     transition_matrix[0, 0] = (1 - pcL)
     transition_matrix[0, 1] =  pcL 
@@ -97,7 +95,9 @@ def get_emission_matrix(matrix_click, p_break = 0.15):
 
 
     return transition_matrix
-matrix_click = np.array([0.2, 0.3])
+
+
+matrix_click = np.array([[0.2, 0.3]])
 m = get_emission_matrix(matrix_click, p_break= 0.15)
 # [sum(x) for x in m]
-m # строки Sки, строки состояний вектор состояний для каждой Ски это просто m[i] это наша эска
+m # строки Sки,  вектор состояний для каждой Ски это просто m[i, :] это вектор эмиссий для Ski
