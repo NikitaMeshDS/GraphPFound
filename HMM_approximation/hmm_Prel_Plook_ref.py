@@ -5,8 +5,8 @@ P_look = [
     [0.2, 0.2, 0.6],
 ]
 
-# P_click = P_rel(i)/2
-# P_buy_click = Prel(i)/2 # Вероятность покупки при клике
+# P_click = P_rel(i)
+# P_buy_click = Prel(i) # Вероятность покупки при клике
 # P_break = 0.15
 
 
