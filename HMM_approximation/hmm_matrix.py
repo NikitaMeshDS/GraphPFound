@@ -16,6 +16,8 @@ S0 -> S0, S3, S0B, S0D, S3B, S3D
 S1 -> S0, S3, S0B, S0D, S3B, S3D
 S2 -> S1, S2, S1B, S1D, S2B, S2D
 S3 -> S1, S2, S1B, S1D, S2B, S2D
+
+None - пустое состояние - ушел с покупкой или без
 '''
 import numpy as np
 
