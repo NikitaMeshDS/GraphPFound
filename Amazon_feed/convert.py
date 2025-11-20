@@ -51,61 +51,76 @@ pair_to_x = {
 def encode_row(L_cb, R_cb):
     return pair_to_x[(L_cb, R_cb)]
 
-def infer_state(prev_state, current_state):
+def infer_state(prev_move, cur_col):
     """
-    prev_state, current_state = (row, col)
-    Возвращает s0..s3
+    prev_move: 'down' or 'side'
+    cur_col: 0 (L) or 1 (R)
     """
+    if prev_move == 'side':
+        # диагональный спуск
+        return 1 if cur_col == 0 else 3
+    else:
+        # вертикальный спуск (включая старт)
+        return 0 if cur_col == 0 else 2
 
-    if prev_state is None:
-        # Начало траектории
-        # Если пришел в (0,0) → сверху в левую → s0
-        # Если пришел в (0,1) → сверху в правую → s3
-        return 0 if current_state[1] == 0 else 3
-
-    (pr, pc) = prev_state
-    (cr, cc) = current_state
-
-    # движение вниз
-    if cr == pr + 1 and cc == pc:
-        if cc == 0: return 0   # L column
-        else:       return 2   # R column
-
-    # движение вправо
-    if cr == pr and cc == pc + 1:
-        return 3
-
-    # движение влево
-    if cr == pr and cc == pc - 1:
-        return 1
 
 
 def convert_chain_to_states(chain):
     results = []
-    prev_state = None
+    prev_pos = None
+    prev_move = None   # 'down' или 'side'
 
     for idx, (state, color, click, purchase, brk) in enumerate(chain):
 
-        # вычисляем состояние строки по полной логике
+        cur_pos = state  # (row, col)
+        row, col = cur_pos
+
+        # определение движения
+        if prev_pos is None:
+            cur_move = 'down'     # старт — приход сверху
+        else:
+            pr, pc = prev_pos
+            if row == pr + 1 and col == pc:
+
+                cur_move = 'down'
+            elif row == pr and abs(col - pc) == 1:
+                cur_move = 'side'
+            
+            
         L_cb, R_cb = extract_row_state(chain, idx)
         x = encode_row(L_cb, R_cb)
 
-        # движение s0..s3
-        s = infer_state(prev_state, state)
 
+        if cur_move == 'down':
+
+            s = infer_state(prev_move, col)
+
+            # финальные случаи
+            if brk == 1:
+                suffix = 'B' if purchase else 'D'
+                results.append(f"s{s}{suffix}: x{x}")
+                return results
+
+            if purchase == 1:
+                results.append(f"s{s}B: x{x}")
+                return results
+
+            # обычный вниз-ход
+            results.append(f"s{s}: x{x}")
         # финальные случаи
         if brk == 1:
-            results.append(f"s{s}{'B' if purchase else 'D'}: x{x}")
+            s = infer_state(prev_move, col)
+            suffix = 'B' if purchase else 'D'
+            results.append(f"s{s}{suffix}: x{x}")
             return results
 
         if purchase == 1:
+            s = infer_state(prev_move, col)
             results.append(f"s{s}B: x{x}")
             return results
 
-        # обычный шаг
-        results.append(f"s{s}: x{x}")
-
-        prev_state = state
+        prev_move = cur_move
+        prev_pos = cur_pos
 
     return results
 
@@ -113,6 +128,9 @@ def convert_chain_to_states(chain):
 
 n_chains = 1
 chains = generate_chains(n_chains, 20, P_look, P_rel, P_break)
+
+
 for chain in chains:
     convert_chain = convert_chain_to_states(chain)
-    print(chain, convert_chain)
+    print(chain)
+    print(convert_chain)
