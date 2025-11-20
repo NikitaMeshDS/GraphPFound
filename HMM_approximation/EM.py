@@ -196,6 +196,28 @@ def get_emission_matrix(matrix_click, p_break = 0.15):
 
 S_dict = {0: "S0", 1: "S1", 2: "S2", 3: "S3", 4: "S0B", 5: "S1B", 6: "S2B", 7: "S3B", 8: "S0D", 9: "S1D", 10: "S2D", 11: "S3D", 12: "None"}
 X_dict = {0: "X0", 1: "X1", 2: "X2", 3: "X3", 4: "X4", 5: "X5", 6: "X6", 7: "X7"}
+def get_start_states(rel_matrix, p_look, delivery, p_break = 0.15):
+    delivery = np.asarray(delivery)
+
+    # приведение Enum -> int (если delivery из Enum), либо int -> int
+    colors = np.vectorize(int)(delivery)
+    # 0_0 0_1
+    # 1_0 1_1
+    #"S0", "S1", "S2", "S3", "S0B", "S1B", "S2B", "S3B", "S0D", "S1D", "S2D", "S3D",  "None"
+    start_states = np.zeros((13, 1))
+
+    p_move_right = p_look[colors[0, 0]][colors[0, 1]] / (p_look[colors[0, 0]][colors[0, 1]] + p_look[colors[0, 0]][colors[1, 0]])
+    p_move_left_down = p_look[colors[0, 0]][colors[1, 0]] / (p_look[colors[0, 0]][colors[0, 1]] + p_look[colors[0, 0]][colors[1, 0]])
+    start_states[0, 0] = (1 - rel_matrix[0, 0]) * (1 - p_break) * p_move_left_down # P(s0|s0)
+    start_states[3, 0] = (1 - rel_matrix[0, 0]) * (1 - p_break) * p_move_right * (1 - rel_matrix[0, 1]) * (1 - p_break) # P(s3|s0)
+    start_states[4, 0] = rel_matrix[0, 0] # P(s0b|s0)
+    start_states[7, 0] = (1 - rel_matrix[0, 0]) * (1 - p_break) * p_move_right * rel_matrix[0, 1] # P(s3b|s0)
+    start_states[8, 0] = (1 - rel_matrix[0, 0]) * p_break # P(s0d|s0)
+    start_states[11, 0] = (1 - rel_matrix[0, 0]) * (1 - p_break) * p_move_right * (1 - rel_matrix[0, 1]) * p_break # P(s3d|s0)
+
+    return start_states.T
+
+states_list = []
 
 def demo(sostoyanie = 1): # sostoyanie - 1 полный вывод, 2 - прикольный вывод
     # Пример матрицы релевантностей (вероятность купить при просмотре)
@@ -236,7 +258,9 @@ def demo(sostoyanie = 1): # sostoyanie - 1 полный вывод, 2 - прик
 
     np.set_printoptions(precision=3, suppress=True)
 
-    state = np.array([0.25, 0.25, 0.25, 0.25, 0, 0, 0, 0, 0, 0, 0, 0, 0])
+    state = get_start_states(rel_matrix[0: 0 + 2, :], P_look, delivery[0:0+2, :], p_break=0.05)
+    states_list.append(state[0]) 
+    print("Начальное распределение состояний:\n", state)
     for i in range(rel_matrix.shape[0] - 1):
         T = get_transition_matrix(rel_matrix[i: i + 2, :], P_look, delivery[i:i+2, :], p_break=0.15)
         matrix_click = np.array(rel_matrix[i: i + 1, :])
@@ -251,6 +275,7 @@ def demo(sostoyanie = 1): # sostoyanie - 1 полный вывод, 2 - прик
             state = state @ T
 
             print(f"\nРаспределение после {i} шага:\n", state)
+            states_list.append(state[0])
 
             print("\nМатрица переходов T (13x13) =\n", T)
 
@@ -280,9 +305,21 @@ def demo(sostoyanie = 1): # sostoyanie - 1 полный вывод, 2 - прик
                         row_vals.append(f"P({X_dict[x]}|{S_dict[s]})={E[s, x]:.4f}")
                 if row_vals:
                     print(f"{S_dict[s]}: " + ", ".join(row_vals))
-
+        
             print()
-    
+        
+
+def GraphPfound(states):
+    p_found = 0.0
+    n_states = states.shape[0]
+    for i in range(n_states):
+        S_buy = states[i, 4:8]
+        p_found += np.sum(S_buy)
+    return p_found
+
 
 if __name__ == "__main__":
     demo(sostoyanie=1)
+    states_list = np.array(states_list)
+    Pfound = GraphPfound(states_list)   
+    print("GraphPfound =", Pfound)    
