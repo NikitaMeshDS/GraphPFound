@@ -83,7 +83,7 @@ def demo():
     )
 
     np.set_printoptions(precision=3, suppress=True)
-
+    # Это просто нулевое расределение по состояниям, начальные состояния
     state = get_start_states(rel_matrix[0: 0 + 2, :], P_look, delivery[0:0+2, :], p_break=0.05)
     print("Start states:\n", state.T)
 
