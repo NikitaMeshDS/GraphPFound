@@ -59,6 +59,6 @@ P_buy_click = np.array([
     [0.07, 0.41],
     [0.0, 0.14]
 ])
-
+# P_click поменять на то что документы прибиты
 P_buy = P_click * P_buy_click
 print(P_buy)
