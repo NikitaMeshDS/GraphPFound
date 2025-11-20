@@ -90,11 +90,36 @@ def convert_chain_to_states(chain):
 
     return results
 
-n_chains = 1
-chains = generate_chains(n_chains, 20, P_look, P_rel, P_break)
-
-for chain in chains:
-    convert_chain = convert_chain_to_states(chain)
-    print(chain)
-    print(convert_chain)
+if __name__ == "__main__":
+    matrix_filepath = "saved_matrix.json"
     
+    if os.path.exists(matrix_filepath):
+        print(f"Загрузка сохраненной матрицы из {matrix_filepath}...")
+        matrix, metadata = load_matrix(matrix_filepath)
+    else:
+        print("Сохраненная матрица не найдена. Генерация новой матрицы...")
+        print("Загрузка данных и моделей...")
+        data, tifd, tf, w2v_model = load_all()
+        
+        query = "black T-shirt"
+        rows, cols = 8, 2
+        
+        matrix = generate_feed_matrix(
+            query=query,
+            n_products=rows * cols,
+            vectorizer=tifd,
+            product_vectors=tf,
+            data_df=data,
+            rows=rows,
+            cols=cols,
+            w2v_model=w2v_model
+        )
+        
+        save_matrix(matrix, matrix_filepath, query=query, rows=rows, cols=cols)
+    
+    n_chains = 5
+    chains = generate_chains(n_chains, matrix, p_break=0.05)
+
+    for chain in chains:
+        convert_chain = convert_chain_to_states(chain)
+        print(convert_chain)
