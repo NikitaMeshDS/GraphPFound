@@ -7,6 +7,7 @@ import pandas as pd
 import re
 import os
 import tempfile
+import json
 from sklearn.metrics.pairwise import cosine_similarity
 from sklearn.feature_extraction.text import TfidfVectorizer
 import nltk
@@ -111,10 +112,8 @@ def generate_feed_tfidf(query, n_products, vectorizer, product_vectors, data_df,
     
     return results
 
-
 # Глобальная переменная для кэширования модели эмбеддингов
 _cached_embedding_model = None
-
 
 def get_embedding_model(w2v_model=None):
     """Получает модель для эмбеддингов: Word2Vec или None (fallback на TF-IDF)"""
@@ -244,38 +243,15 @@ def generate_feed_matrix(query, n_products, vectorizer, product_vectors, data_df
     - P_look1: схожесть с товаром сверху по изображениям от 0 до 1
     - P_look2: схожесть с товаром слева/справа по изображениям от 0 до 1
     
-    Параметры:
     -----------
     query : str
         Текстовый запрос пользователя
-    n_products : int
-        Количество товаров (должно быть rows * cols)
-    vectorizer : TfidfVectorizer
-        Векторизатор TF-IDF
-    product_vectors : sparse matrix
-        TF-IDF векторы товаров
-    data_df : pandas.DataFrame
-        DataFrame с данными о товарах
-    rows : int
-        Количество строк в матрице
-    cols : int
-        Количество колонок в матрице (обычно 2)
     embedding_model : optional
         Модель для эмбеддингов (sentence-transformers) для P_buy
     image_model : optional
         Модель VGG16 для извлечения эмбеддингов изображений
     w2v_model : optional
         Уже загруженная модель Word2Vec (если есть)
-    
-    Возвращает:
-    -----------
-    matrix : list of list of dict
-        Матрица размера rows * cols, где каждый элемент - словарь с ключами:
-        - 'id': str
-        - 'P_click': float (0-1)
-        - 'P_buy': float (0-1)
-        - 'P_look1': float (0-1) или None если нет товара сверху
-        - 'P_look2': float (0-1) или None если нет товара слева/справа
     """
     # Генерируем выдачу товаров
     results = generate_feed_tfidf(query, n_products, vectorizer, product_vectors, data_df, rows=rows)
@@ -291,7 +267,7 @@ def generate_feed_matrix(query, n_products, vectorizer, product_vectors, data_df
     tfidf_similarities = cosine_similarity(query_vector, product_vectors_subset)[0]
     p_click_values = (tfidf_similarities + 1) / 2
     p_click_values = np.sqrt(p_click_values)
-    p_click_values = np.clip(p_click_values - 0.2, 0, 1)
+    p_click_values = np.clip(p_click_values - 0.4, 0, 1)
     
     # Вычисляем P_buy для каждого товара (sentence-transformers схожесть)
     if embedding_model is None:
@@ -300,7 +276,7 @@ def generate_feed_matrix(query, n_products, vectorizer, product_vectors, data_df
     p_buy_values = []
     for item in results:
         prob, _ = calculate_purchase_probability(query, item['product_name'], embedding_model=embedding_model, data_df=data_df, w2v_model=w2v_model)
-        p_buy_values.append(max(0, prob - 0.2))
+        p_buy_values.append(max(0, prob - 0.4))
     
     # Вычисляем эмбеддинги изображений для всех товаров
     import tensorflow as tf
@@ -401,15 +377,6 @@ def generate_feed_matrix(query, n_products, vectorizer, product_vectors, data_df
 def display_feed_matrix(matrix, rows=2, cols=2):
     """
     Отображает матрицу выдачи в удобном виде
-    
-    Параметры:
-    -----------
-    matrix : list of list of dict
-        Матрица от generate_feed_matrix
-    rows : int
-        Количество строк
-    cols : int
-        Количество колонок
     """
     print("=" * 100)
     print("МАТРИЦА ВЫДАЧИ ТОВАРОВ")
@@ -451,15 +418,58 @@ def display_feed_matrix(matrix, rows=2, cols=2):
         print("\nСводная таблица:")
         print(df.to_string(index=False))
 
+
+def save_matrix(matrix, filepath, query=None, rows=None, cols=None):
+    """
+    Сохраняет матрицу в JSON файл
+    """
+    data = {
+        'matrix': matrix,
+        'metadata': {
+            'query': query,
+            'rows': rows or len(matrix),
+            'cols': cols or (len(matrix[0]) if matrix and matrix[0] else 0)
+        }
+    }
+    
+    with open(filepath, 'w', encoding='utf-8') as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+    
+    print(f"Матрица сохранена в {filepath}")
+
+
+def load_matrix(filepath):
+    """
+    Загружает матрицу из JSON файла
+    
+    Возвращает:
+    -----------
+    matrix : list of list of dict
+        Загруженная матрица
+    metadata : dict
+        Метаданные (query, rows, cols)
+    """
+    with open(filepath, 'r', encoding='utf-8') as f:
+        data = json.load(f)
+    
+    matrix = data['matrix']
+    metadata = data.get('metadata', {})
+    
+    print(f"Матрица загружена из {filepath}")
+    if metadata.get('query'):
+        print(f"Запрос: {metadata['query']}")
+    print(f"Размер: {metadata.get('rows', '?')} x {metadata.get('cols', '?')}")
+    
+    return matrix, metadata
+
+
 if __name__ == "__main__":
-    # Загружаем данные и модели
-    print("Загрузка данных и моделей...")
     data, tifd, tf, w2v_model = load_all()
     
     # Параметры запроса
-    query = "black T-shirt"
-    n_products = 16
-    rows = 8
+    query = "dress"
+    n_products = 32
+    rows = 16
     cols = 2
 
     # Генерируем матрицу
@@ -473,6 +483,10 @@ if __name__ == "__main__":
         cols=cols,
         w2v_model=w2v_model
     )
+
+    # Сохраняем матрицу
+    matrix_filepath = "saved_matrix.json"
+    save_matrix(matrix, matrix_filepath, query=query, rows=rows, cols=cols)
 
     # Отображаем результаты
     display_feed_matrix(matrix, rows=rows, cols=cols)
