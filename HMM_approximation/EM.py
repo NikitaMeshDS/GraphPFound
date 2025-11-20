@@ -238,7 +238,7 @@ def demo(sostoyanie = 1): # sostoyanie - 1 полный вывод, 2 - прик
 
     state = np.array([0.25, 0.25, 0.25, 0.25, 0, 0, 0, 0, 0, 0, 0, 0, 0])
     for i in range(rel_matrix.shape[0] - 1):
-        T = get_transition_matrix(rel_matrix[i: i + 2, :], P_look, delivery[i:i+2, :], p_break=0.05)
+        T = get_transition_matrix(rel_matrix[i: i + 2, :], P_look, delivery[i:i+2, :], p_break=0.15)
         matrix_click = np.array(rel_matrix[i: i + 1, :])
         E = get_emission_matrix(matrix_click, p_break= 0.15)
         if i == 0:
