@@ -1,42 +1,5 @@
 from generate_chains import *
 
-def extract_row_state(chain, idx):
-    """
-    Возвращает (L_cb, R_cb) для строки chain[idx].row
-    L_cb, R_cb = (click, buy)
-    """
-
-    (row_i, side_i) = chain[idx][0]  # state = (row, col)
-    row = row_i
-
-    # Инициализация
-    L_cb = (0,0)
-    R_cb = (0,0)
-
-    # Найдём шаги на этой же строке
-    same_row_steps = [ j for j,(st,_,c,p,b) in enumerate(chain)
-                       if st[0] == row ]
-
-    # смотрим назад
-    for j in same_row_steps:
-        (st, _, c, p, b) = chain[j]
-        col = st[1]
-        if j <= idx:
-            if col == 0: L_cb = (c,p)
-            else:        R_cb = (c,p)
-
-    # смотрим вперёд — если позже будет посещена карточка, 
-    # берём её (click,buy), потому что они достоверны
-    for j in same_row_steps:
-        if j > idx:
-            (st,_,c,p,b) = chain[j]
-            col = st[1]
-            if col == 0: L_cb = (c,p)
-            else:        R_cb = (c,p)
-
-    return L_cb, R_cb
-
-
 pair_to_x = {
     ((0,0),(0,0)): 0,
     ((1,0),(0,0)): 1,
@@ -48,89 +11,90 @@ pair_to_x = {
     ((1,0),(1,1)): 7,
 }
 
+def extract_row_state(chain, row):
+    """Возвращает (L_cb, R_cb) = (click,buy) для полки row"""
+    L_cb = (0,0)
+    R_cb = (0,0)
+    for (r,c),_,click,purchase,_ in chain:
+        if r == row:
+            if c == 0:
+                L_cb = (click,purchase)
+            else:
+                R_cb = (click,purchase)
+    return L_cb, R_cb
+
 def encode_row(L_cb, R_cb):
-    return pair_to_x[(L_cb, R_cb)]
+    return pair_to_x[(L_cb,R_cb)]
 
-def infer_state(prev_move, cur_col):
+def infer_state(prev_col, exit_col, L_cb, R_cb):
     """
-    prev_move: 'down' or 'side'
-    cur_col: 0 (L) or 1 (R)
+    prev_col: откуда пришли (0=лево,1=право)
+    exit_col: куда ушли (0=лево,1=право)
+    Если последняя строка, exit_col определяется по B/D на соответствующей колонке
     """
-    if prev_move == 'side':
-        # диагональный спуск
-        return 1 if cur_col == 0 else 3
-    else:
-        # вертикальный спуск (включая старт)
-        return 0 if cur_col == 0 else 2
-
-
+    if prev_col == 0 and exit_col == 0:
+        return 0  # S0
+    elif prev_col == 1 and exit_col == 0:
+        return 1  # S1
+    elif prev_col == 1 and exit_col == 1:
+        return 2  # S2
+    elif prev_col == 0 and exit_col == 1:
+        return 3  # S3
 
 def convert_chain_to_states(chain):
     results = []
-    prev_pos = None
-    prev_move = None   # 'down' или 'side'
+    n = len(chain)
 
-    for idx, (state, color, click, purchase, brk) in enumerate(chain):
+    # Сначала сгруппируем шаги по строкам
+    rows = {}
+    for idx,(state,color,click,purchase,brk) in enumerate(chain):
+        row, col = state
+        if row not in rows:
+            rows[row] = []
+        rows[row].append((idx,state,color,click,purchase,brk))
 
-        cur_pos = state  # (row, col)
-        row, col = cur_pos
+    prev_col = None
+    sorted_rows = sorted(rows.keys())
 
-        # определение движения
-        if prev_pos is None:
-            cur_move = 'down'     # старт — приход сверху
+    for i,row in enumerate(sorted_rows):
+        steps = rows[row]
+
+        # Определяем откуда пришли
+        if prev_col is None:
+            # стартовая колонка берем первую посещенную на этой строке
+            first_step = steps[0]
+            prev_col = first_step[1][1]
+
+        # Определяем куда ушли с этой строки
+        # Берем колонку последнего шага на строке
+        last_step = steps[-1]
+        exit_col = last_step[1][1]
+
+        # Если последняя строка и есть B/D на какой-либо колонке, это финал
+        final_suffix = ''
+        L_cb, R_cb = extract_row_state(chain,row)
+        if any(purchase==1 for idx,state,color,click,purchase,brk in steps):
+            final_suffix = 'B'
+        elif any(brk==1 for idx,state,color,click,purchase,brk in steps):
+            final_suffix = 'D'
+
+        x = encode_row(L_cb,R_cb)
+        s = infer_state(prev_col, exit_col, L_cb, R_cb)
+
+        if final_suffix:
+            results.append(f"s{s}{final_suffix}: x{x}")
         else:
-            pr, pc = prev_pos
-            if row == pr + 1 and col == pc:
-
-                cur_move = 'down'
-            elif row == pr and abs(col - pc) == 1:
-                cur_move = 'side'
-            
-            
-        L_cb, R_cb = extract_row_state(chain, idx)
-        x = encode_row(L_cb, R_cb)
-
-
-        if cur_move == 'down':
-
-            s = infer_state(prev_move, col)
-
-            # финальные случаи
-            if brk == 1:
-                suffix = 'B' if purchase else 'D'
-                results.append(f"s{s}{suffix}: x{x}")
-                return results
-
-            if purchase == 1:
-                results.append(f"s{s}B: x{x}")
-                return results
-
-            # обычный вниз-ход
             results.append(f"s{s}: x{x}")
-        # финальные случаи
-        if brk == 1:
-            s = infer_state(prev_move, col)
-            suffix = 'B' if purchase else 'D'
-            results.append(f"s{s}{suffix}: x{x}")
-            return results
 
-        if purchase == 1:
-            s = infer_state(prev_move, col)
-            results.append(f"s{s}B: x{x}")
-            return results
-
-        prev_move = cur_move
-        prev_pos = cur_pos
+        prev_col = exit_col
 
     return results
 
-
-
 n_chains = 1
 chains = generate_chains(n_chains, 20, P_look, P_rel, P_break)
-
 
 for chain in chains:
     convert_chain = convert_chain_to_states(chain)
     print(chain)
     print(convert_chain)
+    
